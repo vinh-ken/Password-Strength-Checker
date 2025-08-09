@@ -179,32 +179,9 @@
                     userIdDisplay.textContent = userId;
                     isAuthReady = true;
 
-                    // Get user's config document
-                    const configCollectionRef = collection(db, 'artifacts', appId, 'users', userId, 'config');
-                    const configQuerySnapshot = await getDocs(configCollectionRef);
+                    // Immediately show the master password modal
+                    masterPasswordModal.classList.remove('hidden');
 
-                    if (!configQuerySnapshot.empty) {
-                        const configData = configQuerySnapshot.docs[0].data();
-                        
-                        // Check for master password hash
-                        if (configData.masterPasswordHash) {
-                            masterPasswordPrompt.textContent = "Please enter your master password to unlock your vault.";
-                            masterPasswordModal.classList.remove('hidden');
-                        } else {
-                            // First-time user, prompt to set a master password
-                            masterPasswordPrompt.textContent = "Welcome! Please set a master password to secure your vault.";
-                            masterPasswordModal.classList.remove('hidden');
-                        }
-                        
-                        // Store the 2FA secret if it exists
-                        if (configData.twoFactorSecret) {
-                            twoFactorSecret = configData.twoFactorSecret;
-                        }
-                    } else {
-                         // First-time user, prompt to set a master password
-                         masterPasswordPrompt.textContent = "Welcome! Please set a master password to secure your vault.";
-                         masterPasswordModal.classList.remove('hidden');
-                    }
                 } else {
                     // Sign in with custom token if available, otherwise anonymously
                     try {
@@ -223,7 +200,7 @@
             loadingText.textContent = "Error: Firebase is not configured.";
         }
 
-        // --- Master Password & Encryption Logic (Same as before) ---
+        // --- Master Password & Encryption Logic ---
 
         const hashMasterPassword = async (password) => {
             const encoder = new TextEncoder();
@@ -344,18 +321,14 @@
             masterPasswordError.classList.add('hidden');
             masterPasswordSubmitBtn.textContent = 'Unlocking...';
 
-            const configDocRef = doc(db, 'artifacts', appId, 'users', userId, 'config', 'userConfig');
-            const configDocSnap = await getDocs(query(collection(db, 'artifacts', appId, 'users', userId, 'config')));
-            
-            let storedHash = null;
-            if (!configDocSnap.empty) {
-                const configData = configDocSnap.docs[0].data();
-                storedHash = configData.masterPasswordHash;
-                twoFactorSecret = configData.twoFactorSecret;
-            }
+            const configCollectionRef = collection(db, 'artifacts', appId, 'users', userId, 'config');
+            const configQuerySnapshot = await getDocs(configCollectionRef);
 
-            if (storedHash) {
-                // User is logging in
+            if (!configQuerySnapshot.empty) {
+                // Existing user, verify master password
+                const configData = configQuerySnapshot.docs[0].data();
+                const storedHash = configData.masterPasswordHash;
+                twoFactorSecret = configData.twoFactorSecret;
                 const enteredHash = await hashMasterPassword(masterPassword);
                 
                 if (storedHash === enteredHash) {
@@ -365,7 +338,6 @@
                     if (twoFactorSecret) {
                         twoFactorLoginModal.classList.remove('hidden');
                     } else {
-                        // Master password correct, but no 2FA set up yet. Prompt for setup.
                         setupTwoFactor();
                     }
                 } else {
@@ -373,12 +345,12 @@
                     masterPasswordError.classList.remove('hidden');
                 }
             } else {
-                // User is setting up for the first time
+                // First-time user, set master password
                 const masterPasswordHash = await hashMasterPassword(masterPassword);
+                const configDocRef = doc(db, 'artifacts', appId, 'users', userId, 'config', 'userConfig');
                 await setDoc(configDocRef, { masterPasswordHash: masterPasswordHash, createdAt: serverTimestamp() }, { merge: true });
                 masterKey = await deriveKey(masterPassword);
                 
-                // Now that master password is set, prompt for 2FA setup
                 setupTwoFactor();
             }
 
@@ -396,7 +368,6 @@
             
             if (authenticator.check(token, twoFactorSecret)) {
                 twoFactorSetupError.classList.add('hidden');
-                // Token is valid, save the secret to Firestore
                 await saveTwoFactorSecret();
             } else {
                 twoFactorSetupError.textContent = "Invalid code. Please try again.";
@@ -417,7 +388,6 @@
                 twoFactorLoginError.classList.add('hidden');
                 twoFactorLoginModal.classList.add('hidden');
                 mainContent.classList.remove('hidden');
-                // Start listening for passwords after successful 2FA
                 listenForPasswords();
             } else {
                 twoFactorLoginError.textContent = "Invalid code. Please try again.";
@@ -425,7 +395,7 @@
             }
         });
 
-        // --- Password Strength Checker Logic (Same as before) ---
+        // --- Password Strength Checker Logic ---
 
         const checkPasswordStrength = (password) => {
             const lengthScore = password.length >= 8 ? 1 : 0;
@@ -472,10 +442,9 @@
             checkPasswordStrength(e.target.value);
         });
 
-        // Initial check for an empty password field
         checkPasswordStrength('');
 
-        // --- Password Generator Logic (Same as before) ---
+        // --- Password Generator Logic ---
 
         const generatePassword = (length = 16, useUppercase = true, useNumbers = true, useSymbols = true) => {
             const lower = 'abcdefghijklmnopqrstuvwxyz';
@@ -512,7 +481,7 @@
             }
         });
 
-        // --- Password Manager CRUD Logic (Same as before) ---
+        // --- Password Manager CRUD Logic ---
 
         const listenForPasswords = () => {
             const passwordCollectionRef = collection(db, 'artifacts', appId, 'users', userId, 'passwords');
@@ -525,7 +494,6 @@
                     return;
                 }
                 
-                // Process passwords after auth is ready and master key is derived
                 if (isAuthReady && masterKey) {
                     const passwords = [];
                     for (const doc of querySnapshot.docs) {
@@ -597,7 +565,6 @@
             const newPassword = newPasswordInput.value;
 
             if (!passwordName || !newPassword) {
-                // In a real app, you'd show a modal or toast for this error
                 console.error("Password name and password cannot be empty.");
                 return;
             }
@@ -612,7 +579,6 @@
                     iv: encryptedData.iv,
                     createdAt: serverTimestamp()
                 });
-                // Clear inputs and hide modal
                 passwordNameInput.value = '';
                 newPasswordInput.value = '';
                 addPasswordModal.classList.add('hidden');
