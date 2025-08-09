@@ -3,18 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Secure Password Manager with 2FA</title>
+    <title>Secure Password Manager</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         body {
             font-family: 'Inter', sans-serif;
             background-color: #0f172a;
             color: #e2e8f0;
-        }
-        .scroll-container {
-            max-height: 400px;
-            overflow-y: auto;
         }
     </style>
 </head>
@@ -25,54 +20,14 @@
             <p class="mt-2 text-lg text-slate-400">Store and check the strength of your passwords securely.</p>
         </header>
 
-        <!-- Loading Screen -->
-        <div id="loadingScreen" class="fixed inset-0 bg-slate-900 flex items-center justify-center p-4 z-50">
-            <div class="text-center space-y-4">
-                <div class="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent mx-auto"></div>
-                <p class="text-lg font-semibold text-white">Loading...</p>
-            </div>
-        </div>
-
         <!-- Master Password Modal -->
         <div id="masterPasswordModal" class="fixed inset-0 bg-slate-900 bg-opacity-75 flex items-center justify-center p-4 z-50 hidden">
             <div class="bg-slate-800 p-6 rounded-2xl shadow-xl max-w-sm w-full space-y-4">
                 <h2 class="text-2xl font-bold text-center text-white">Unlock Manager</h2>
-                <p id="masterPasswordPrompt" class="text-sm text-slate-400 text-center"></p>
+                <p id="masterPasswordPrompt" class="text-sm text-slate-400 text-center">Please enter your master password to access your passwords. This password is used to encrypt your data.</p>
                 <input type="password" id="masterPasswordInput" placeholder="Master Password" class="w-full p-3 rounded-xl bg-slate-700 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <button id="masterPasswordSubmitBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl transition duration-300 transform hover:scale-105 shadow-lg">Submit</button>
                 <div id="masterPasswordError" class="text-red-400 text-center mt-2 hidden"></div>
-            </div>
-        </div>
-
-        <!-- 2FA Setup Modal -->
-        <div id="twoFactorSetupModal" class="fixed inset-0 bg-slate-900 bg-opacity-75 flex items-center justify-center p-4 z-50 hidden">
-            <div class="bg-slate-800 p-6 rounded-2xl shadow-xl max-w-sm w-full space-y-4 text-center">
-                <h2 class="text-2xl font-bold text-white">Set up Two-Factor Authentication</h2>
-                <p class="text-sm text-slate-400">Scan this QR code with your authenticator app (e.g., Google Authenticator, Authy) and enter the 6-digit code to enable 2FA.</p>
-                <div id="qrcode" class="flex justify-center my-4"></div>
-                <input type="text" id="twoFactorTokenSetupInput" placeholder="6-digit code" class="w-full p-3 rounded-xl bg-slate-700 text-white placeholder-slate-400 text-center focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <button id="verifyTwoFactorSetupBtn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-xl transition duration-300 transform hover:scale-105 shadow-lg">Verify & Enable 2FA</button>
-                <div id="twoFactorSetupError" class="text-red-400 text-center mt-2 hidden"></div>
-            </div>
-        </div>
-
-        <!-- 2FA Login Modal -->
-        <div id="twoFactorLoginModal" class="fixed inset-0 bg-slate-900 bg-opacity-75 flex items-center justify-center p-4 z-50 hidden">
-            <div class="bg-slate-800 p-6 rounded-2xl shadow-xl max-w-sm w-full space-y-4 text-center">
-                <h2 class="text-2xl font-bold text-white">Enter Two-Factor Code</h2>
-                <p class="text-sm text-slate-400">Please enter the 6-digit code from your authenticator app.</p>
-                <input type="text" id="twoFactorTokenLoginInput" placeholder="6-digit code" class="w-full p-3 rounded-xl bg-slate-700 text-white placeholder-slate-400 text-center focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <button id="verifyTwoFactorLoginBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl transition duration-300 transform hover:scale-105 shadow-lg">Verify & Unlock</button>
-                <div id="twoFactorLoginError" class="text-red-400 text-center mt-2 hidden"></div>
-            </div>
-        </div>
-        
-        <!-- Error Modal -->
-        <div id="errorModal" class="fixed inset-0 bg-red-900 bg-opacity-75 flex items-center justify-center p-4 z-50 hidden">
-            <div class="bg-red-800 p-6 rounded-2xl shadow-xl max-w-sm w-full space-y-4 text-center">
-                <h2 class="text-2xl font-bold text-white">An Error Occurred</h2>
-                <p id="errorMessage" class="text-sm text-red-200"></p>
-                <button id="closeErrorModalBtn" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded-xl transition duration-300">Close</button>
             </div>
         </div>
 
@@ -92,9 +47,7 @@
                 <h2 class="text-2xl font-bold text-white mb-4">Password Strength Checker</h2>
                 <div class="space-y-4">
                     <input type="password" id="passwordInput" placeholder="Enter a password to check its strength" class="w-full p-3 rounded-xl bg-slate-700 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    <div id="strengthIndicatorContainer" class="h-2 rounded-full bg-slate-700">
-                        <div id="strengthIndicator" class="h-full rounded-full transition-all duration-300"></div>
-                    </div>
+                    <div id="strengthIndicator" class="h-2 rounded-full"></div>
                     <p id="strengthText" class="text-sm text-slate-400 text-center"></p>
                 </div>
             </section>
@@ -129,7 +82,7 @@
                     </div>
                 </div>
 
-                <div id="passwordList" class="space-y-4 mt-4 scroll-container">
+                <div id="passwordList" class="space-y-4 mt-4">
                     <!-- Passwords will be dynamically loaded here -->
                     <p id="loadingText" class="text-center text-slate-500">Loading passwords...</p>
                 </div>
@@ -140,9 +93,8 @@
     <!-- Firebase Imports -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, onSnapshot, setDoc, collection, addDoc, serverTimestamp, query, getDocs, updateDoc, deleteDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { authenticator } from 'https://cdn.jsdelivr.net/npm/otplib@12.0.1/otplib-browser.js';
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, onSnapshot, setDoc, collection, addDoc, serverTimestamp, query, where, getDocs, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Firebase Global Variables provided by the Canvas environment
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
@@ -150,11 +102,9 @@
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
         let app, db, auth, userId, masterKey;
-        let twoFactorSecret = null;
-        let qrcodeInstance = null;
-        
+        let isAuthReady = false;
+
         // HTML Elements
-        const loadingScreen = document.getElementById('loadingScreen');
         const masterPasswordModal = document.getElementById('masterPasswordModal');
         const masterPasswordInput = document.getElementById('masterPasswordInput');
         const masterPasswordPrompt = document.getElementById('masterPasswordPrompt');
@@ -176,94 +126,51 @@
         const savePasswordBtn = document.getElementById('savePasswordBtn');
         const cancelSaveBtn = document.getElementById('cancelSaveBtn');
         const loadingText = document.getElementById('loadingText');
-        const errorModal = document.getElementById('errorModal');
-        const errorMessage = document.getElementById('errorMessage');
-        const closeErrorModalBtn = document.getElementById('closeErrorModalBtn');
 
-        // 2FA Modals & Elements
-        const twoFactorSetupModal = document.getElementById('twoFactorSetupModal');
-        const twoFactorTokenSetupInput = document.getElementById('twoFactorTokenSetupInput');
-        const verifyTwoFactorSetupBtn = document.getElementById('verifyTwoFactorSetupBtn');
-        const twoFactorSetupError = document.getElementById('twoFactorSetupError');
-        const twoFactorLoginModal = document.getElementById('twoFactorLoginModal');
-        const twoFactorTokenLoginInput = document.getElementById('twoFactorTokenLoginInput');
-        const verifyTwoFactorLoginBtn = document.getElementById('verifyTwoFactorLoginBtn');
-        const twoFactorLoginError = document.getElementById('twoFactorLoginError');
-        const qrcodeContainer = document.getElementById('qrcode');
+        // Initialize Firebase
+        if (Object.keys(firebaseConfig).length > 0) {
+            app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
 
-        // --- Utility Functions ---
+            // Listen for auth state changes
+            onAuthStateChanged(auth, async (user) => {
+                if (user) {
+                    userId = user.uid;
+                    userIdDisplay.textContent = userId;
+                    isAuthReady = true;
 
-        const showError = (message) => {
-            errorMessage.textContent = message;
-            errorModal.classList.remove('hidden');
-            loadingScreen.classList.add('hidden');
-        };
+                    // Check for a stored master password hash
+                    const masterPasswordDocRef = doc(db, 'artifacts', appId, 'users', userId, 'config', 'masterPassword');
+                    const masterPasswordDocSnap = await getDocs(query(collection(db, 'artifacts', appId, 'users', userId, 'config')));
 
-        const showLoading = () => {
-            loadingScreen.classList.remove('hidden');
-            masterPasswordModal.classList.add('hidden');
-            twoFactorSetupModal.classList.add('hidden');
-            twoFactorLoginModal.classList.add('hidden');
-            mainContent.classList.add('hidden');
-        };
-
-        const hideAllModals = () => {
-            loadingScreen.classList.add('hidden');
-            masterPasswordModal.classList.add('hidden');
-            twoFactorSetupModal.classList.add('hidden');
-            twoFactorLoginModal.classList.add('hidden');
-        };
-
-        // --- Core App Initialization & Authentication ---
-        const initializeAppAndAuth = async () => {
-            try {
-                showLoading();
-
-                if (!firebaseConfig || Object.keys(firebaseConfig).length === 0) {
-                    throw new Error("Firebase configuration is missing.");
-                }
-
-                app = initializeApp(firebaseConfig);
-                db = getFirestore(app);
-                auth = getAuth(app);
-
-                // Sign in the user
-                let userCredential;
-                if (initialAuthToken) {
-                    userCredential = await signInWithCustomToken(auth, initialAuthToken);
+                    if (!masterPasswordDocSnap.empty) {
+                        // Master password exists, prompt for it
+                        masterPasswordPrompt.textContent = "Please enter your master password to unlock your vault.";
+                        masterPasswordModal.classList.remove('hidden');
+                    } else {
+                        // First-time user, prompt to set a master password
+                        masterPasswordPrompt.textContent = "Welcome! Please set a master password to secure your vault.";
+                        masterPasswordModal.classList.remove('hidden');
+                    }
                 } else {
-                    userCredential = await signInAnonymously(auth);
+                    // Sign in with custom token if available, otherwise anonymously
+                    try {
+                        if (initialAuthToken) {
+                            await signInWithCustomToken(auth, initialAuthToken);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    } catch (error) {
+                        console.error("Error signing in:", error);
+                    }
                 }
-
-                userId = userCredential.user.uid;
-                userIdDisplay.textContent = userId;
-                
-                await checkUserConfig();
-
-            } catch (error) {
-                console.error("Error during app initialization:", error);
-                showError(`App failed to start. Error: ${error.message}`);
-            }
-        };
-
-        const checkUserConfig = async () => {
-            try {
-                const configDocRef = doc(db, 'artifacts', appId, 'users', userId, 'config', 'userConfig');
-                const configDoc = await getDoc(configDocRef);
-
-                hideAllModals();
-                masterPasswordModal.classList.remove('hidden');
-
-                if (configDoc.exists()) {
-                    masterPasswordPrompt.textContent = 'Please enter your master password to access your passwords.';
-                } else {
-                    masterPasswordPrompt.textContent = 'Welcome! Please create a master password to get started.';
-                }
-            } catch (error) {
-                console.error("Error checking user config:", error);
-                showError(`Failed to load user configuration. Error: ${error.message}`);
-            }
-        };
+            });
+        } else {
+            console.error("Firebase config is missing. App cannot function without it.");
+            // Hide loading text and show an error if firebase is not configured
+            loadingText.textContent = "Error: Firebase is not configured.";
+        }
 
         // --- Master Password & Encryption Logic ---
 
@@ -275,7 +182,7 @@
         };
 
         const deriveKey = async (masterPassword) => {
-            const salt = new TextEncoder().encode(userId);
+            const salt = new TextEncoder().encode(userId); // Use userId as salt for key derivation
             const masterPasswordBuffer = new TextEncoder().encode(masterPassword);
             const keyMaterial = await crypto.subtle.importKey(
                 'raw',
@@ -301,7 +208,7 @@
         const encrypt = async (text, key) => {
             const encoder = new TextEncoder();
             const data = encoder.encode(text);
-            const iv = crypto.getRandomValues(new Uint8Array(12));
+            const iv = crypto.getRandomValues(new Uint8Array(12)); // AES-GCM IV is 12 bytes
             const encrypted = await crypto.subtle.encrypt(
                 { name: 'AES-GCM', iv: iv },
                 key,
@@ -334,50 +241,6 @@
             }
         };
 
-        // --- 2FA Logic ---
-        const setupTwoFactor = async () => {
-            twoFactorSecret = authenticator.generateSecret();
-            const otpauthUrl = authenticator.keyuri(userId, 'PasswordManager', twoFactorSecret);
-            
-            qrcodeContainer.innerHTML = '';
-            new QRCode(qrcodeContainer, {
-                text: otpauthUrl,
-                width: 128,
-                height: 128,
-                colorDark : "#e2e8f0",
-                colorLight : "#0f172a"
-            });
-            
-            hideAllModals();
-            twoFactorSetupModal.classList.remove('hidden');
-        };
-
-        const saveTwoFactorSecret = async () => {
-            const configDocRef = doc(db, 'artifacts', appId, 'users', userId, 'config', 'userConfig');
-            try {
-                await setDoc(configDocRef, { twoFactorSecret: twoFactorSecret }, { merge: true });
-                console.log("2FA secret saved successfully!");
-                twoFactorSetupModal.classList.add('hidden');
-                mainContent.classList.remove('hidden');
-                listenForPasswords();
-            } catch (error) {
-                console.error("Error saving 2FA secret:", error);
-                twoFactorSetupError.textContent = "Error saving secret. Please try again.";
-                twoFactorSetupError.classList.remove('hidden');
-            }
-        };
-
-        const startApp = () => {
-            hideAllModals();
-            mainContent.classList.remove('hidden');
-            listenForPasswords();
-        };
-
-        // --- Event Listeners ---
-        closeErrorModalBtn.addEventListener('click', () => {
-            errorModal.classList.add('hidden');
-        });
-
         masterPasswordSubmitBtn.addEventListener('click', async () => {
             const masterPassword = masterPasswordInput.value;
             if (!masterPassword) {
@@ -389,77 +252,37 @@
             masterPasswordError.classList.add('hidden');
             masterPasswordSubmitBtn.textContent = 'Unlocking...';
 
-            try {
-                const configDocRef = doc(db, 'artifacts', appId, 'users', userId, 'config', 'userConfig');
-                const configDoc = await getDoc(configDocRef);
+            // Check if a master password is already set
+            const masterPasswordDocRef = doc(db, 'artifacts', appId, 'users', userId, 'config', 'masterPassword');
+            const masterPasswordDocSnap = await getDocs(query(collection(db, 'artifacts', appId, 'users', userId, 'config')));
+
+            if (!masterPasswordDocSnap.empty) {
+                // User is logging in
+                const storedHash = masterPasswordDocSnap.docs[0].data().hash;
+                const enteredHash = await hashMasterPassword(masterPassword);
+                
+                if (storedHash === enteredHash) {
+                    masterKey = await deriveKey(masterPassword);
+                    masterPasswordModal.classList.add('hidden');
+                    mainContent.classList.remove('hidden');
+                    // Start listening for passwords
+                    listenForPasswords();
+                } else {
+                    masterPasswordError.textContent = "Incorrect master password.";
+                    masterPasswordError.classList.remove('hidden');
+                }
+            } else {
+                // User is setting up for the first time
+                const masterPasswordHash = await hashMasterPassword(masterPassword);
+                await setDoc(masterPasswordDocRef, { hash: masterPasswordHash, createdAt: serverTimestamp() });
                 
                 masterKey = await deriveKey(masterPassword);
-
-                if (configDoc.exists()) {
-                    // Existing user, verify master password
-                    const configData = configDoc.data();
-                    const storedHash = configData.masterPasswordHash;
-                    twoFactorSecret = configData.twoFactorSecret;
-                    const enteredHash = await hashMasterPassword(masterPassword);
-                    
-                    if (storedHash === enteredHash) {
-                        if (twoFactorSecret) {
-                            hideAllModals();
-                            twoFactorLoginModal.classList.remove('hidden');
-                        } else {
-                            setupTwoFactor();
-                        }
-                    } else {
-                        masterPasswordError.textContent = "Incorrect master password.";
-                        masterPasswordError.classList.remove('hidden');
-                    }
-                } else {
-                    // First-time user, set master password
-                    const masterPasswordHash = await hashMasterPassword(masterPassword);
-                    await setDoc(configDocRef, { masterPasswordHash: masterPasswordHash, createdAt: serverTimestamp() });
-                    setupTwoFactor();
-                }
-            } catch (error) {
-                console.error("Authentication error:", error);
-                masterPasswordError.textContent = "An error occurred. Please try again.";
-                masterPasswordError.classList.remove('hidden');
-            } finally {
-                masterPasswordSubmitBtn.textContent = 'Submit';
-            }
-        });
-
-        verifyTwoFactorSetupBtn.addEventListener('click', async () => {
-            const token = twoFactorTokenSetupInput.value;
-            if (!token) {
-                twoFactorSetupError.textContent = "Please enter the 6-digit code.";
-                twoFactorSetupError.classList.remove('hidden');
-                return;
-            }
-            
-            if (authenticator.check(token, twoFactorSecret)) {
-                twoFactorSetupError.classList.add('hidden');
-                await saveTwoFactorSecret();
-            } else {
-                twoFactorSetupError.textContent = "Invalid code. Please try again.";
-                twoFactorSetupError.classList.remove('hidden');
-            }
-        });
-
-        verifyTwoFactorLoginBtn.addEventListener('click', async () => {
-            const token = twoFactorTokenLoginInput.value;
-            if (!token) {
-                twoFactorLoginError.textContent = "Please enter the 6-digit code.";
-                twoFactorLoginError.classList.remove('hidden');
-                return;
+                masterPasswordModal.classList.add('hidden');
+                mainContent.classList.remove('hidden');
+                listenForPasswords();
             }
 
-            if (authenticator.check(token, twoFactorSecret)) {
-                twoFactorLoginError.classList.add('hidden');
-                startApp();
-            } else {
-                twoFactorLoginError.textContent = "Invalid code. Please try again.";
-                twoFactorLoginError.classList.remove('hidden');
-            }
+            masterPasswordSubmitBtn.textContent = 'Submit';
         });
 
         // --- Password Strength Checker Logic ---
@@ -498,9 +321,6 @@
                     strength = 'Very Strong';
                     color = '#22c55e'; // Green
                     break;
-                default:
-                    strength = 'Very Weak';
-                    color = '#f87171';
             }
 
             strengthIndicator.style.width = `${(totalScore / 5) * 100}%`;
@@ -512,17 +332,21 @@
             checkPasswordStrength(e.target.value);
         });
 
+        // Initial check for an empty password field
         checkPasswordStrength('');
 
         // --- Password Generator Logic ---
 
-        const generatePassword = (length = 16) => {
+        const generatePassword = (length = 16, useUppercase = true, useNumbers = true, useSymbols = true) => {
             const lower = 'abcdefghijklmnopqrstuvwxyz';
             const upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
             const numbers = '0123456789';
             const symbols = '!@#$%^&*()_+~`|}{[]:;?><,./-=';
             
-            let characters = lower + upper + numbers + symbols;
+            let characters = lower;
+            if (useUppercase) characters += upper;
+            if (useNumbers) characters += numbers;
+            if (useSymbols) characters += symbols;
             
             let password = '';
             for (let i = 0; i < length; i++) {
@@ -561,7 +385,8 @@
                     return;
                 }
                 
-                if (masterKey) {
+                // Process passwords after auth is ready and master key is derived
+                if (isAuthReady && masterKey) {
                     const passwords = [];
                     for (const doc of querySnapshot.docs) {
                         const data = doc.data();
@@ -569,8 +394,6 @@
                         passwords.push({ id: doc.id, name: data.name, password: decryptedPassword });
                     }
                     renderPasswords(passwords);
-                } else {
-                     passwordList.innerHTML = '<p class="text-center text-slate-500">Authenticating...</p>';
                 }
             }, (error) => {
                 console.error("Error fetching passwords:", error);
@@ -634,12 +457,14 @@
             const newPassword = newPasswordInput.value;
 
             if (!passwordName || !newPassword) {
+                // In a real app, you'd show a modal or toast for this error
                 console.error("Password name and password cannot be empty.");
                 return;
             }
             
+            const encryptedData = await encrypt(newPassword, masterKey);
+
             try {
-                const encryptedData = await encrypt(newPassword, masterKey);
                 const passwordCollectionRef = collection(db, 'artifacts', appId, 'users', userId, 'passwords');
                 await addDoc(passwordCollectionRef, {
                     name: passwordName,
@@ -647,6 +472,7 @@
                     iv: encryptedData.iv,
                     createdAt: serverTimestamp()
                 });
+                // Clear inputs and hide modal
                 passwordNameInput.value = '';
                 newPasswordInput.value = '';
                 addPasswordModal.classList.add('hidden');
@@ -654,9 +480,6 @@
                 console.error("Error adding document: ", error);
             }
         });
-        
-        // Start the application
-        initializeAppAndAuth();
     </script>
 </body>
 </html>
