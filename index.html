@@ -232,15 +232,6 @@
         // --- Core App Initialization & Authentication ---
         const initializeAppAndAuth = async () => {
             try {
-                if (!firebaseConfig || Object.keys(firebaseConfig).length === 0) {
-                    throw new Error("Firebase configuration is missing.");
-                }
-
-                // Check if otplib and QRCode libraries are available
-                if (typeof otplib === 'undefined' || typeof QRCode === 'undefined') {
-                    throw new Error("Required libraries (otplib or QRCode) were not found.");
-                }
-                
                 // Initialize otplib and Firebase
                 authenticator = otplib.authenticator;
                 app = initializeApp(firebaseConfig);
@@ -679,6 +670,11 @@
         const loadDependenciesAndInitApp = async () => {
             showLoading('Loading dependencies...');
             try {
+                // Check for Firebase config before loading dependencies
+                if (Object.keys(firebaseConfig).length === 0) {
+                    throw new Error("Firebase configuration is missing. The application cannot start without it.");
+                }
+
                 // Dynamically load all required scripts
                 await loadScript("https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js");
                 await loadScript("https://unpkg.com/@otplib/preset-browser@12.0.1/buffer.js");
