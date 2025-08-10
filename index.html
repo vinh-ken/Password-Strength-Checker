@@ -1,701 +1,368 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Secure Password Manager with 2FA</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #0f172a;
-            color: #e2e8f0;
-        }
-        .scroll-container {
-            max-height: 400px;
-            overflow-y: auto;
-        }
-    </style>
-</head>
-<body class="p-6">
-    <div id="app" class="max-w-4xl mx-auto space-y-8">
-        <header class="text-center">
-            <h1 class="text-4xl md:text-5xl font-extrabold text-blue-400">Secure Password Manager</h1>
-            <p class="mt-2 text-lg text-slate-400">Store and check the strength of your passwords securely.</p>
-        </header>
+import React, { useState, useEffect } from 'react';
 
-        <!-- Loading Screen -->
-        <div id="loadingScreen" class="fixed inset-0 bg-slate-900 flex items-center justify-center p-4 z-50">
-            <div class="text-center space-y-4">
-                <div class="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent mx-auto"></div>
-                <p id="loadingText" class="text-lg font-semibold text-white">Loading...</p>
-            </div>
-        </div>
+// Firebase Imports
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
+import { getFirestore, collection, doc, setDoc, onSnapshot, query } from 'firebase/firestore';
 
-        <!-- Master Password Modal -->
-        <div id="masterPasswordModal" class="fixed inset-0 bg-slate-900 bg-opacity-75 flex items-center justify-center p-4 z-50 hidden">
-            <div class="bg-slate-800 p-6 rounded-2xl shadow-xl max-w-sm w-full space-y-4">
-                <h2 class="text-2xl font-bold text-center text-white">Unlock Manager</h2>
-                <p id="masterPasswordPrompt" class="text-sm text-slate-400 text-center"></p>
-                <input type="password" id="masterPasswordInput" placeholder="Master Password" class="w-full p-3 rounded-xl bg-slate-700 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <button id="masterPasswordSubmitBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl transition duration-300 transform hover:scale-105 shadow-lg">Submit</button>
-                <div id="masterPasswordError" class="text-red-400 text-center mt-2 hidden"></div>
-            </div>
-        </div>
+// Crypto-js for encryption
+import CryptoJS from 'crypto-js';
 
-        <!-- 2FA Setup Modal -->
-        <div id="twoFactorSetupModal" class="fixed inset-0 bg-slate-900 bg-opacity-75 flex items-center justify-center p-4 z-50 hidden">
-            <div class="bg-slate-800 p-6 rounded-2xl shadow-xl max-w-sm w-full space-y-4 text-center">
-                <h2 class="text-2xl font-bold text-white">Set up Two-Factor Authentication</h2>
-                <p class="text-sm text-slate-400">Scan this QR code with your authenticator app (e.g., Google Authenticator, Authy) and enter the 6-digit code to enable 2FA.</p>
-                <div id="qrcode" class="flex justify-center my-4"></div>
-                <input type="text" id="twoFactorTokenSetupInput" placeholder="6-digit code" class="w-full p-3 rounded-xl bg-slate-700 text-white placeholder-slate-400 text-center focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <button id="verifyTwoFactorSetupBtn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-xl transition duration-300 transform hover:scale-105 shadow-lg">Verify & Enable 2FA</button>
-                <div id="twoFactorSetupError" class="text-red-400 text-center mt-2 hidden"></div>
-            </div>
-        </div>
+const App = () => {
+    // State variables
+    const [passwords, setPasswords] = useState([]);
+    const [title, setTitle] = useState('');
+    const [password, setPassword] = useState('');
+    const [masterPassword, setMasterPassword] = useState('');
+    const [isLoggedIn, setIsLoggedIn] = useState(false);
+    const [isAuthReady, setIsAuthReady] = useState(false);
+    const [authMode, setAuthMode] = useState('login'); // 'login' or 'signup'
+    const [email, setEmail] = useState('');
+    const [authPassword, setAuthPassword] = useState('');
+    const [error, setError] = useState('');
 
-        <!-- 2FA Login Modal -->
-        <div id="twoFactorLoginModal" class="fixed inset-0 bg-slate-900 bg-opacity-75 flex items-center justify-center p-4 z-50 hidden">
-            <div class="bg-slate-800 p-6 rounded-2xl shadow-xl max-w-sm w-full space-y-4 text-center">
-                <h2 class="text-2xl font-bold text-white">Enter Two-Factor Code</h2>
-                <p class="text-sm text-slate-400">Please enter the 6-digit code from your authenticator app.</p>
-                <input type="text" id="twoFactorTokenLoginInput" placeholder="6-digit code" class="w-full p-3 rounded-xl bg-slate-700 text-white placeholder-slate-400 text-center focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <button id="verifyTwoFactorLoginBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl transition duration-300 transform hover:scale-105 shadow-lg">Verify & Unlock</button>
-                <div id="twoFactorLoginError" class="text-red-400 text-center mt-2 hidden"></div>
-            </div>
-        </div>
-        
-        <!-- Error Modal -->
-        <div id="errorModal" class="fixed inset-0 bg-red-900 bg-opacity-75 flex items-center justify-center p-4 z-50 hidden">
-            <div class="bg-red-800 p-6 rounded-2xl shadow-xl max-w-sm w-full space-y-4 text-center">
-                <h2 class="text-2xl font-bold text-white">An Error Occurred</h2>
-                <p id="errorMessage" class="text-sm text-red-200"></p>
-                <button id="closeErrorModalBtn" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded-xl transition duration-300">Close</button>
-            </div>
-        </div>
+    // Firebase state
+    const [db, setDb] = useState(null);
+    const [auth, setAuth] = useState(null);
+    const [userId, setUserId] = useState(null);
 
-        <!-- Main App Content -->
-        <div id="mainContent" class="hidden space-y-8">
-            <!-- User ID Display -->
-            <div id="userIdDisplay" class="bg-slate-800 p-4 rounded-xl text-center shadow-md">
-                <p class="text-sm text-slate-400">
-                    Your unique user ID (for collaboration):
-                    <br>
-                    <span id="userId" class="font-mono text-xs md:text-sm text-yellow-300 break-all"></span>
-                </p>
-            </div>
+    // Get the Firebase config and app ID from the environment
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+    const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+    const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
-            <!-- Password Strength Checker Section -->
-            <section class="bg-slate-800 p-6 rounded-2xl shadow-xl">
-                <h2 class="text-2xl font-bold text-white mb-4">Password Strength Checker</h2>
-                <div class="space-y-4">
-                    <input type="password" id="passwordInput" placeholder="Enter a password to check its strength" class="w-full p-3 rounded-xl bg-slate-700 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    <div id="strengthIndicatorContainer" class="h-2 rounded-full bg-slate-700">
-                        <div id="strengthIndicator" class="h-full rounded-full transition-all duration-300"></div>
-                    </div>
-                    <p id="strengthText" class="text-sm text-slate-400 text-center"></p>
-                </div>
-            </section>
+    // A function to securely generate a user ID for private data
+    const getUserId = (user) => {
+        return user?.uid || crypto.randomUUID();
+    };
 
-            <!-- Password Generation Section -->
-            <section class="bg-slate-800 p-6 rounded-2xl shadow-xl">
-                <h2 class="text-2xl font-bold text-white mb-4">Password Generator</h2>
-                <div class="flex flex-col md:flex-row items-center space-y-4 md:space-y-0 md:space-x-4">
-                    <button id="generateBtn" class="w-full md:w-auto bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-xl transition duration-300 transform hover:scale-105 shadow-lg">Generate Strong Password</button>
-                    <input type="text" id="generatedPassword" readonly class="w-full p-3 rounded-xl bg-slate-700 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-green-500 cursor-not-allowed">
-                    <button id="copyBtn" class="w-full md:w-auto bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 px-4 rounded-xl transition duration-300 transform hover:scale-105 shadow-lg">Copy</button>
-                </div>
-            </section>
+    // Firebase initialization and authentication
+    useEffect(() => {
+        try {
+            const app = initializeApp(firebaseConfig);
+            const firestore = getFirestore(app);
+            const authService = getAuth(app);
+            setDb(firestore);
+            setAuth(authService);
+            console.log("Firebase Initialized.");
 
-            <!-- Password Manager Section -->
-            <section class="bg-slate-800 p-6 rounded-2xl shadow-xl">
-                <div class="flex justify-between items-center mb-4">
-                    <h2 class="text-2xl font-bold text-white">My Saved Passwords</h2>
-                    <button id="addPasswordBtn" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold py-2 px-4 rounded-xl transition duration-300 transform hover:scale-105 shadow-lg">Add New</button>
-                </div>
-                
-                <!-- Add New Password Modal -->
-                <div id="addPasswordModal" class="fixed inset-0 bg-slate-900 bg-opacity-75 flex items-center justify-center p-4 z-50 hidden">
-                    <div class="bg-slate-800 p-6 rounded-2xl shadow-xl max-w-sm w-full space-y-4">
-                        <h2 class="text-2xl font-bold text-center text-white">Add New Password</h2>
-                        <input type="text" id="passwordNameInput" placeholder="Password Name (e.g., Google, Bank)" class="w-full p-3 rounded-xl bg-slate-700 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <input type="password" id="newPasswordInput" placeholder="Password to save" class="w-full p-3 rounded-xl bg-slate-700 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <div class="flex space-x-2">
-                            <button id="savePasswordBtn" class="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-xl transition duration-300 transform hover:scale-105 shadow-lg">Save Password</button>
-                            <button id="cancelSaveBtn" class="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded-xl transition duration-300 transform hover:scale-105 shadow-lg">Cancel</button>
-                        </div>
-                    </div>
-                </div>
-
-                <div id="passwordList" class="space-y-4 mt-4 scroll-container">
-                    <!-- Passwords will be dynamically loaded here -->
-                    <p class="text-center text-slate-500">Loading passwords...</p>
-                </div>
-            </section>
-        </div>
-    </div>
-
-    <!-- Main Application Logic -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc, deleteDoc, onSnapshot, collection, query, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // Firebase Global Variables provided by the Canvas environment
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
-        let app, db, auth, userId, masterKey, authenticator;
-        let twoFactorSecret = null;
-        
-        // HTML Elements
-        const loadingScreen = document.getElementById('loadingScreen');
-        const loadingText = document.getElementById('loadingText');
-        const masterPasswordModal = document.getElementById('masterPasswordModal');
-        const masterPasswordInput = document.getElementById('masterPasswordInput');
-        const masterPasswordPrompt = document.getElementById('masterPasswordPrompt');
-        const masterPasswordSubmitBtn = document.getElementById('masterPasswordSubmitBtn');
-        const masterPasswordError = document.getElementById('masterPasswordError');
-        const mainContent = document.getElementById('mainContent');
-        const userIdDisplay = document.getElementById('userId');
-        const passwordInput = document.getElementById('passwordInput');
-        const strengthIndicator = document.getElementById('strengthIndicator');
-        const strengthText = document.getElementById('strengthText');
-        const generateBtn = document.getElementById('generateBtn');
-        const generatedPasswordInput = document.getElementById('generatedPassword');
-        const copyBtn = document.getElementById('copyBtn');
-        const passwordList = document.getElementById('passwordList');
-        const addPasswordBtn = document.getElementById('addPasswordBtn');
-        const addPasswordModal = document.getElementById('addPasswordModal');
-        const passwordNameInput = document.getElementById('passwordNameInput');
-        const newPasswordInput = document.getElementById('newPasswordInput');
-        const savePasswordBtn = document.getElementById('savePasswordBtn');
-        const cancelSaveBtn = document.getElementById('cancelSaveBtn');
-        const errorModal = document.getElementById('errorModal');
-        const errorMessage = document.getElementById('errorMessage');
-        const closeErrorModalBtn = document.getElementById('closeErrorModalBtn');
-
-        // 2FA Modals & Elements
-        const twoFactorSetupModal = document.getElementById('twoFactorSetupModal');
-        const twoFactorTokenSetupInput = document.getElementById('twoFactorTokenSetupInput');
-        const verifyTwoFactorSetupBtn = document.getElementById('verifyTwoFactorSetupBtn');
-        const twoFactorSetupError = document.getElementById('twoFactorSetupError');
-        const twoFactorLoginModal = document.getElementById('twoFactorLoginModal');
-        const twoFactorTokenLoginInput = document.getElementById('twoFactorTokenLoginInput');
-        const verifyTwoFactorLoginBtn = document.getElementById('verifyTwoFactorLoginBtn');
-        const twoFactorLoginError = document.getElementById('twoFactorLoginError');
-        const qrcodeContainer = document.getElementById('qrcode');
-
-        // --- Utility Functions ---
-
-        const showError = (message) => {
-            errorMessage.textContent = message;
-            errorModal.classList.remove('hidden');
-            loadingScreen.classList.add('hidden');
-        };
-
-        const showLoading = (message = 'Loading...') => {
-            loadingText.textContent = message;
-            loadingScreen.classList.remove('hidden');
-            masterPasswordModal.classList.add('hidden');
-            twoFactorSetupModal.classList.add('hidden');
-            twoFactorLoginModal.classList.add('hidden');
-            mainContent.classList.add('hidden');
-        };
-
-        const hideAllModals = () => {
-            loadingScreen.classList.add('hidden');
-            masterPasswordModal.classList.add('hidden');
-            twoFactorSetupModal.classList.add('hidden');
-            twoFactorLoginModal.classList.add('hidden');
-        };
-        
-        // Dynamically load a script and return a promise
-        const loadScript = (url) => {
-            return new Promise((resolve, reject) => {
-                const script = document.createElement('script');
-                script.src = url;
-                script.onload = () => {
-                    console.log(`Successfully loaded: ${url}`);
-                    resolve();
+            // Set up the authentication state listener
+            const unsubscribe = onAuthStateChanged(authService, async (user) => {
+                if (user) {
+                    setIsLoggedIn(true);
+                    setUserId(getUserId(user));
+                    console.log("User is authenticated:", user.uid);
+                } else {
+                    setIsLoggedIn(false);
+                    setUserId(null);
+                    console.log("User is not authenticated.");
                 }
-                script.onerror = () => {
-                    console.error(`Failed to load: ${url}`);
-                    reject(new Error(`Failed to load script: ${url}. Please check your network connection.`));
-                };
-                document.head.appendChild(script);
+                setIsAuthReady(true);
             });
-        };
 
-        // --- Core App Initialization & Authentication ---
-        const initializeAppAndAuth = async () => {
-            try {
-                // Initialize otplib and Firebase
-                authenticator = otplib.authenticator;
-                app = initializeApp(firebaseConfig);
-                db = getFirestore(app);
-                auth = getAuth(app);
-                
-                // Sign in the user
-                let userCredential;
-                if (initialAuthToken) {
-                    userCredential = await signInWithCustomToken(auth, initialAuthToken);
-                } else {
-                    userCredential = await signInAnonymously(auth);
-                }
-
-                userId = userCredential.user.uid;
-                userIdDisplay.textContent = userId;
-                
-                await checkUserConfig();
-
-            } catch (error) {
-                console.error("Error during app initialization:", error);
-                showError(`App failed to start. Error: ${error.message}`);
-            }
-        };
-
-        const checkUserConfig = async () => {
-            try {
-                const configDocRef = doc(db, 'artifacts', appId, 'users', userId, 'config', 'userConfig');
-                const configDoc = await getDoc(configDocRef);
-
-                hideAllModals();
-                masterPasswordModal.classList.remove('hidden');
-
-                if (configDoc.exists()) {
-                    masterPasswordPrompt.textContent = 'Please enter your master password to access your passwords.';
-                } else {
-                    masterPasswordPrompt.textContent = 'Welcome! Please create a master password to get started.';
-                }
-            } catch (error) {
-                console.error("Error checking user config:", error);
-                showError(`Failed to load user configuration. Error: ${error.message}`);
-            }
-        };
-
-        // --- Master Password & Encryption Logic ---
-
-        const hashMasterPassword = async (password) => {
-            const encoder = new TextEncoder();
-            const data = encoder.encode(password);
-            const hash = await crypto.subtle.digest('SHA-256', data);
-            return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
-        };
-
-        const deriveKey = async (masterPassword) => {
-            const salt = new TextEncoder().encode(userId);
-            const masterPasswordBuffer = new TextEncoder().encode(masterPassword);
-            const keyMaterial = await crypto.subtle.importKey(
-                'raw',
-                masterPasswordBuffer,
-                { name: 'PBKDF2' },
-                false,
-                ['deriveKey']
-            );
-            return await crypto.subtle.deriveKey(
-                {
-                    name: 'PBKDF2',
-                    salt: salt,
-                    iterations: 100000,
-                    hash: 'SHA-256',
-                },
-                keyMaterial,
-                { name: 'AES-GCM', length: 256 },
-                true,
-                ['encrypt', 'decrypt']
-            );
-        };
-
-        const encrypt = async (text, key) => {
-            const encoder = new TextEncoder();
-            const data = encoder.encode(text);
-            const iv = crypto.getRandomValues(new Uint8Array(12));
-            const encrypted = await crypto.subtle.encrypt(
-                { name: 'AES-GCM', iv: iv },
-                key,
-                data
-            );
-            const encryptedArray = new Uint8Array(encrypted);
-            const ivHex = Array.from(iv).map(b => b.toString(16).padStart(2, '0')).join('');
-            const encryptedHex = Array.from(encryptedArray).map(b => b.toString(16).padStart(2, '0')).join('');
-            return {
-                iv: ivHex,
-                encryptedText: encryptedHex,
-            };
-        };
-
-        const decrypt = async (encryptedData, key) => {
-            try {
-                const iv = Uint8Array.from(encryptedData.iv.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
-                const encryptedText = Uint8Array.from(encryptedData.encryptedText.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
-
-                const decrypted = await crypto.subtle.decrypt(
-                    { name: 'AES-GCM', iv: iv },
-                    key,
-                    encryptedText
-                );
-                const decoder = new TextDecoder();
-                return decoder.decode(decrypted);
-            } catch (error) {
-                console.error("Decryption failed:", error);
-                return "[Decryption Failed]";
-            }
-        };
-
-        // --- 2FA Logic ---
-        const setupTwoFactor = async () => {
-            twoFactorSecret = authenticator.generateSecret();
-            const otpauthUrl = authenticator.keyuri(userId, 'PasswordManager', twoFactorSecret);
-            
-            qrcodeContainer.innerHTML = '';
-            new QRCode(qrcodeContainer, {
-                text: otpauthUrl,
-                width: 128,
-                height: 128,
-                colorDark : "#e2e8f0",
-                colorLight : "#0f172a"
-            });
-            
-            hideAllModals();
-            twoFactorSetupModal.classList.remove('hidden');
-        };
-
-        const saveTwoFactorSecret = async () => {
-            const configDocRef = doc(db, 'artifacts', appId, 'users', userId, 'config', 'userConfig');
-            try {
-                await setDoc(configDocRef, { twoFactorSecret: twoFactorSecret }, { merge: true });
-                console.log("2FA secret saved successfully!");
-                twoFactorSetupModal.classList.add('hidden');
-                mainContent.classList.remove('hidden');
-                listenForPasswords();
-            } catch (error) {
-                console.error("Error saving 2FA secret:", error);
-                twoFactorSetupError.textContent = "Error saving secret. Please try again.";
-                twoFactorSetupError.classList.remove('hidden');
-            }
-        };
-
-        const startApp = () => {
-            hideAllModals();
-            mainContent.classList.remove('hidden');
-            listenForPasswords();
-        };
-
-        // --- Event Listeners ---
-        closeErrorModalBtn.addEventListener('click', () => {
-            errorModal.classList.add('hidden');
-        });
-
-        masterPasswordSubmitBtn.addEventListener('click', async () => {
-            const masterPassword = masterPasswordInput.value;
-            if (!masterPassword) {
-                masterPasswordError.textContent = "Master password cannot be empty.";
-                masterPasswordError.classList.remove('hidden');
-                return;
-            }
-            
-            masterPasswordError.classList.add('hidden');
-            masterPasswordSubmitBtn.textContent = 'Unlocking...';
-
-            try {
-                const configDocRef = doc(db, 'artifacts', appId, 'users', userId, 'config', 'userConfig');
-                const configDoc = await getDoc(configDocRef);
-                
-                masterKey = await deriveKey(masterPassword);
-
-                if (configDoc.exists()) {
-                    // Existing user, verify master password
-                    const configData = configDoc.data();
-                    const storedHash = configData.masterPasswordHash;
-                    twoFactorSecret = configData.twoFactorSecret;
-                    const enteredHash = await hashMasterPassword(masterPassword);
-                    
-                    if (storedHash === enteredHash) {
-                        if (twoFactorSecret) {
-                            hideAllModals();
-                            twoFactorLoginModal.classList.remove('hidden');
-                        } else {
-                            setupTwoFactor();
-                        }
-                    } else {
-                        masterPasswordError.textContent = "Incorrect master password.";
-                        masterPasswordError.classList.remove('hidden');
-                    }
-                } else {
-                    // First-time user, set master password
-                    const masterPasswordHash = await hashMasterPassword(masterPassword);
-                    await setDoc(configDocRef, { masterPasswordHash: masterPasswordHash, createdAt: serverTimestamp() });
-                    setupTwoFactor();
-                }
-            } catch (error) {
-                console.error("Authentication error:", error);
-                masterPasswordError.textContent = "An error occurred. Please try again.";
-                masterPasswordError.classList.remove('hidden');
-            } finally {
-                masterPasswordSubmitBtn.textContent = 'Submit';
-            }
-        });
-
-        verifyTwoFactorSetupBtn.addEventListener('click', async () => {
-            const token = twoFactorTokenSetupInput.value;
-            if (!token) {
-                twoFactorSetupError.textContent = "Please enter the 6-digit code.";
-                twoFactorSetupError.classList.remove('hidden');
-                return;
-            }
-            
-            if (authenticator.check(token, twoFactorSecret)) {
-                twoFactorSetupError.classList.add('hidden');
-                await saveTwoFactorSecret();
-            } else {
-                twoFactorSetupError.textContent = "Invalid code. Please try again.";
-                twoFactorSetupError.classList.remove('hidden');
-            }
-        });
-
-        verifyTwoFactorLoginBtn.addEventListener('click', async () => {
-            const token = twoFactorTokenLoginInput.value;
-            if (!token) {
-                twoFactorLoginError.textContent = "Please enter the 6-digit code.";
-                twoFactorLoginError.classList.remove('hidden');
-                return;
-            }
-
-            if (authenticator.check(token, twoFactorSecret)) {
-                twoFactorLoginError.classList.add('hidden');
-                startApp();
-            } else {
-                twoFactorLoginError.textContent = "Invalid code. Please try again.";
-                twoFactorLoginError.classList.remove('hidden');
-            }
-        });
-
-        // --- Password Strength Checker Logic ---
-
-        const checkPasswordStrength = (password) => {
-            const lengthScore = password.length >= 8 ? 1 : 0;
-            const uppercaseScore = /[A-Z]/.test(password) ? 1 : 0;
-            const lowercaseScore = /[a-z]/.test(password) ? 1 : 0;
-            const numberScore = /[0-9]/.test(password) ? 1 : 0;
-            const symbolScore = /[^a-zA-Z0-9]/.test(password) ? 1 : 0;
-
-            const totalScore = lengthScore + uppercaseScore + lowercaseScore + numberScore + symbolScore;
-
-            let strength = '';
-            let color = '';
-
-            switch (totalScore) {
-                case 0:
-                case 1:
-                    strength = 'Very Weak';
-                    color = '#f87171'; // Red
-                    break;
-                case 2:
-                    strength = 'Weak';
-                    color = '#fb923c'; // Orange
-                    break;
-                case 3:
-                    strength = 'Medium';
-                    color = '#facc15'; // Yellow
-                    break;
-                case 4:
-                    strength = 'Strong';
-                    color = '#a3e635'; // Lime Green
-                    break;
-                case 5:
-                    strength = 'Very Strong';
-                    color = '#22c55e'; // Green
-                    break;
-                default:
-                    strength = 'Very Weak';
-                    color = '#f87171';
-            }
-
-            strengthIndicator.style.width = `${(totalScore / 5) * 100}%`;
-            strengthIndicator.style.backgroundColor = color;
-            strengthText.textContent = `Strength: ${strength}`;
-        };
-
-        passwordInput.addEventListener('input', (e) => {
-            checkPasswordStrength(e.target.value);
-        });
-
-        checkPasswordStrength('');
-
-        // --- Password Generator Logic ---
-
-        const generatePassword = (length = 16) => {
-            const lower = 'abcdefghijklmnopqrstuvwxyz';
-            const upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-            const numbers = '0123456789';
-            const symbols = '!@#$%^&*()_+~`|}{[]:;?><,./-=';
-            
-            let characters = lower + upper + numbers + symbols;
-            
-            let password = '';
-            for (let i = 0; i < length; i++) {
-                password += characters.charAt(Math.floor(Math.random() * characters.length));
-            }
-            return password;
-        };
-        
-        generateBtn.addEventListener('click', () => {
-            const newPassword = generatePassword();
-            generatedPasswordInput.value = newPassword;
-            checkPasswordStrength(newPassword);
-        });
-        
-        copyBtn.addEventListener('click', () => {
-            if (generatedPasswordInput.value) {
-                generatedPasswordInput.select();
-                document.execCommand('copy');
-                copyBtn.textContent = 'Copied!';
-                setTimeout(() => {
-                    copyBtn.textContent = 'Copy';
-                }, 2000);
-            }
-        });
-
-        // --- Password Manager CRUD Logic ---
-
-        const listenForPasswords = () => {
-            const passwordCollectionRef = collection(db, 'artifacts', appId, 'users', userId, 'passwords');
-            const q = query(passwordCollectionRef);
-            
-            onSnapshot(q, async (querySnapshot) => {
-                passwordList.innerHTML = '';
-                if (querySnapshot.empty) {
-                    passwordList.innerHTML = '<p class="text-center text-slate-500">No passwords saved yet.</p>';
-                    return;
-                }
-                
-                if (masterKey) {
-                    const passwords = [];
-                    for (const doc of querySnapshot.docs) {
-                        const data = doc.data();
-                        const decryptedPassword = await decrypt({ iv: data.iv, encryptedText: data.password }, masterKey);
-                        passwords.push({ id: doc.id, name: data.name, password: decryptedPassword });
-                    }
-                    renderPasswords(passwords);
-                } else {
-                     passwordList.innerHTML = '<p class="text-center text-slate-500">Authenticating...</p>';
-                }
-            }, (error) => {
-                console.error("Error fetching passwords:", error);
-                passwordList.innerHTML = '<p class="text-center text-red-400">Error loading passwords.</p>';
-            });
-        };
-
-        const renderPasswords = (passwords) => {
-            passwordList.innerHTML = '';
-            passwords.forEach(pw => {
-                const passwordItem = document.createElement('div');
-                passwordItem.className = 'bg-slate-700 p-4 rounded-xl flex items-center justify-between shadow-md';
-                passwordItem.innerHTML = `
-                    <div>
-                        <p class="font-bold text-white">${pw.name}</p>
-                        <p class="text-slate-400 text-sm password-text">••••••••••••••</p>
-                    </div>
-                    <div class="flex space-x-2">
-                        <button class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded-xl transition duration-300 show-btn" data-id="${pw.id}" data-password="${pw.password}">Show</button>
-                        <button class="bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-3 rounded-xl transition duration-300 delete-btn" data-id="${pw.id}">Delete</button>
-                    </div>
-                `;
-                passwordList.appendChild(passwordItem);
-            });
-        };
-
-        passwordList.addEventListener('click', async (e) => {
-            if (e.target.classList.contains('show-btn')) {
-                const passwordTextElement = e.target.closest('div').previousElementSibling.querySelector('.password-text');
-                const password = e.target.dataset.password;
-                
-                if (passwordTextElement.textContent === '••••••••••••••') {
-                    passwordTextElement.textContent = password;
-                    e.target.textContent = 'Hide';
-                } else {
-                    passwordTextElement.textContent = '••••••••••••••';
-                    e.target.textContent = 'Show';
-                }
-
-            } else if (e.target.classList.contains('delete-btn')) {
-                const docId = e.target.dataset.id;
-                const passwordDocRef = doc(db, 'artifacts', appId, 'users', userId, 'passwords', docId);
+            // Sign in with the custom token if it exists
+            const signIn = async () => {
                 try {
-                    await deleteDoc(passwordDocRef);
-                } catch (error) {
-                    console.error("Error deleting document:", error);
+                    if (initialAuthToken) {
+                        await signInWithCustomToken(authService, initialAuthToken);
+                        console.log("Signed in with custom token.");
+                    } else {
+                        await signInAnonymously(authService);
+                        console.log("Signed in anonymously.");
+                    }
+                } catch (e) {
+                    console.error("Authentication failed:", e);
+                    setError("Authentication failed.");
                 }
-            }
-        });
+            };
 
-        addPasswordBtn.addEventListener('click', () => {
-            addPasswordModal.classList.remove('hidden');
-        });
+            signIn();
+            return () => unsubscribe();
+        } catch (e) {
+            console.error("Firebase Initialization Error:", e);
+            setError("Failed to initialize Firebase.");
+        }
+    }, [firebaseConfig, initialAuthToken]);
 
-        cancelSaveBtn.addEventListener('click', () => {
-            addPasswordModal.classList.add('hidden');
-        });
+    // Firestore data listener
+    useEffect(() => {
+        if (!db || !userId || !masterPassword) return;
 
-        savePasswordBtn.addEventListener('click', async () => {
-            const passwordName = passwordNameInput.value;
-            const newPassword = newPasswordInput.value;
+        const collectionPath = `/artifacts/${appId}/users/${userId}/passwords`;
+        const q = query(collection(db, collectionPath));
+        console.log("Listening to Firestore for passwords...");
 
-            if (!passwordName || !newPassword) {
-                console.error("Password name and password cannot be empty.");
-                return;
-            }
-            
-            try {
-                const encryptedData = await encrypt(newPassword, masterKey);
-                const passwordCollectionRef = collection(db, 'artifacts', appId, 'users', userId, 'passwords');
-                await addDoc(passwordCollectionRef, {
-                    name: passwordName,
-                    password: encryptedData.encryptedText,
-                    iv: encryptedData.iv,
-                    createdAt: serverTimestamp()
-                });
-                passwordNameInput.value = '';
-                newPasswordInput.value = '';
-                addPasswordModal.classList.add('hidden');
-            } catch (error) {
-                console.error("Error adding document: ", error);
-            }
-        });
+        // Set up a real-time listener for the password collection
+        const unsubscribe = onSnapshot(q, (querySnapshot) => {
+            const fetchedPasswords = [];
+            querySnapshot.forEach((doc) => {
+                const encryptedData = doc.data();
+                try {
+                    // Decrypt the password when retrieving from Firestore
+                    const decryptedPassword = CryptoJS.AES.decrypt(encryptedData.password, masterPassword).toString(CryptoJS.enc.Utf8);
+                    // Decrypt the title
+                    const decryptedTitle = CryptoJS.AES.decrypt(encryptedData.title, masterPassword).toString(CryptoJS.enc.Utf8);
 
-        // Main initialization function to load dependencies and start the app
-        const loadDependenciesAndInitApp = async () => {
-            showLoading('Loading dependencies...');
-            try {
-                // Check for Firebase config before loading dependencies
-                if (Object.keys(firebaseConfig).length === 0) {
-                    throw new Error("Firebase configuration is missing. The application cannot start without it.");
+                    if (decryptedPassword && decryptedTitle) {
+                        fetchedPasswords.push({
+                            id: doc.id,
+                            title: decryptedTitle,
+                            password: decryptedPassword,
+                        });
+                    }
+                } catch (e) {
+                    console.error("Failed to decrypt document:", doc.id, e);
                 }
+            });
+            setPasswords(fetchedPasswords);
+            console.log("Passwords updated from Firestore.");
+        }, (error) => {
+            console.error("Error fetching documents:", error);
+            setError("Failed to fetch passwords.");
+        });
 
-                // Dynamically load all required scripts
-                await loadScript("https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js");
-                await loadScript("https://unpkg.com/@otplib/preset-browser@12.0.1/buffer.js");
-                await loadScript("https://unpkg.com/@otplib/preset-browser@12.0.1/index.js");
+        return () => unsubscribe();
+    }, [db, userId, masterPassword, appId]); // Depend on userId and masterPassword
 
-                // Check if libraries are now available
-                if (typeof QRCode === 'undefined' || typeof otplib === 'undefined') {
-                    throw new Error("One or more required libraries could not be loaded.");
-                }
+    // Handles user signup
+    const handleSignup = async () => {
+        setError('');
+        try {
+            await createUserWithEmailAndPassword(auth, email, authPassword);
+            console.log("User signed up successfully.");
+        } catch (e) {
+            console.error("Signup error:", e);
+            setError(e.message);
+        }
+    };
 
-                showLoading('Initializing app...');
-                await initializeAppAndAuth();
-            } catch (error) {
-                showError(error.message);
-            }
-        };
-        
-        // Start the application after the page is fully loaded
-        window.onload = function () {
-            loadDependenciesAndInitApp();
-        };
-    </script>
-</body>
-</html>
+    // Handles user login
+    const handleLogin = async () => {
+        setError('');
+        try {
+            await signInWithEmailAndPassword(auth, email, authPassword);
+            console.log("User logged in successfully.");
+        } catch (e) {
+            console.error("Login error:", e);
+            setError(e.message);
+        }
+    };
+
+    // Handles user logout
+    const handleLogout = async () => {
+        try {
+            await signOut(auth);
+            setIsLoggedIn(false);
+            setPasswords([]);
+            console.log("User logged out.");
+        } catch (e) {
+            console.error("Logout error:", e);
+            setError("Failed to log out.");
+        }
+    };
+
+    // Handles adding a new password
+    const addPassword = async (e) => {
+        e.preventDefault();
+        if (!title || !password || !masterPassword || !db || !userId) {
+            setError("Please fill in all fields and set a master password.");
+            return;
+        }
+
+        setError('');
+
+        // Encrypt the password before sending it to Firestore
+        const encryptedPassword = CryptoJS.AES.encrypt(password, masterPassword).toString();
+        const encryptedTitle = CryptoJS.AES.encrypt(title, masterPassword).toString();
+
+        try {
+            // Firestore document path for private data
+            const collectionPath = `/artifacts/${appId}/users/${userId}/passwords`;
+            const newPasswordRef = doc(collection(db, collectionPath));
+            await setDoc(newPasswordRef, {
+                title: encryptedTitle,
+                password: encryptedPassword,
+            });
+            setTitle('');
+            setPassword('');
+            console.log("Password added and encrypted.");
+        } catch (e) {
+            console.error("Error adding document:", e);
+            setError("Failed to add password.");
+        }
+    };
+
+    // UI rendering based on authentication state
+    if (!isAuthReady) {
+        return (
+            <div className="flex items-center justify-center min-h-screen bg-gray-100 p-4">
+                <div className="text-center">
+                    <p className="text-xl text-gray-700">Loading...</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (!isLoggedIn) {
+        return (
+            <div className="flex items-center justify-center min-h-screen bg-gray-100 p-4">
+                <div className="bg-white p-8 rounded-xl shadow-lg w-full max-w-md">
+                    <div className="flex justify-between items-center mb-6">
+                        <h1 className="text-3xl font-bold text-gray-800">
+                            {authMode === 'login' ? 'Login' : 'Sign Up'}
+                        </h1>
+                        <button
+                            onClick={() => setAuthMode(authMode === 'login' ? 'signup' : 'login')}
+                            className="text-indigo-600 hover:text-indigo-800 text-sm"
+                        >
+                            {authMode === 'login' ? 'Switch to Sign Up' : 'Switch to Login'}
+                        </button>
+                    </div>
+                    {error && <p className="text-red-500 mb-4">{error}</p>}
+                    <form onSubmit={(e) => {
+                        e.preventDefault();
+                        if (authMode === 'login') {
+                            handleLogin();
+                        } else {
+                            handleSignup();
+                        }
+                    }}>
+                        <div className="mb-4">
+                            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="email">
+                                Email
+                            </label>
+                            <input
+                                type="email"
+                                id="email"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                required
+                            />
+                        </div>
+                        <div className="mb-6">
+                            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="password">
+                                Password
+                            </label>
+                            <input
+                                type="password"
+                                id="password"
+                                value={authPassword}
+                                onChange={(e) => setAuthPassword(e.target.value)}
+                                className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                required
+                            />
+                        </div>
+                        <div className="flex items-center justify-between">
+                            <button
+                                type="submit"
+                                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-lg focus:outline-none focus:shadow-outline w-full"
+                            >
+                                {authMode === 'login' ? 'Login' : 'Sign Up'}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="min-h-screen bg-gray-100 p-4">
+            <div className="bg-white rounded-xl shadow-lg p-6 max-w-3xl mx-auto my-8">
+                <div className="flex justify-between items-center mb-6">
+                    <h1 className="text-3xl font-bold text-gray-800">Password Manager</h1>
+                    <button
+                        onClick={handleLogout}
+                        className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg"
+                    >
+                        Logout
+                    </button>
+                </div>
+
+                <div className="mb-6">
+                    <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="masterPassword">
+                        Master Password
+                    </label>
+                    <input
+                        type="password"
+                        id="masterPassword"
+                        value={masterPassword}
+                        onChange={(e) => setMasterPassword(e.target.value)}
+                        className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        placeholder="Enter your master password to decrypt passwords"
+                        required
+                    />
+                    <p className="text-xs text-gray-500 mt-2">
+                        **Warning: This is a demo. Do NOT use a real master password here. For a real app, this should be handled more securely.**
+                    </p>
+                </div>
+
+                {error && <p className="text-red-500 mb-4">{error}</p>}
+
+                <form onSubmit={addPassword} className="mb-8 p-4 border rounded-xl bg-gray-50">
+                    <h2 className="text-2xl font-semibold mb-4 text-gray-800">Add New Password</h2>
+                    <div className="mb-4">
+                        <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="title">
+                            Title
+                        </label>
+                        <input
+                            type="text"
+                            id="title"
+                            value={title}
+                            onChange={(e) => setTitle(e.target.value)}
+                            className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            placeholder="e.g., Google, Bank Account"
+                            required
+                        />
+                    </div>
+                    <div className="mb-4">
+                        <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="password">
+                            Password
+                        </label>
+                        <input
+                            type="text"
+                            id="password"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            placeholder="Enter password to encrypt"
+                            required
+                        />
+                    </div>
+                    <button
+                        type="submit"
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-lg focus:outline-none focus:shadow-outline w-full"
+                    >
+                        Add Password
+                    </button>
+                </form>
+
+                <div>
+                    <h2 className="text-2xl font-semibold mb-4 text-gray-800">My Passwords</h2>
+                    <p className="text-xs text-gray-600 mb-4">
+                        **Enter your Master Password above to view your encrypted passwords.**
+                    </p>
+                    {passwords.length === 0 ? (
+                        <p className="text-gray-500">No passwords saved yet. Add one above!</p>
+                    ) : (
+                        <div className="space-y-4">
+                            {passwords.map((item) => (
+                                <div key={item.id} className="bg-gray-100 p-4 rounded-xl flex justify-between items-center shadow-sm">
+                                    <div>
+                                        <h3 className="font-bold text-gray-800">{item.title}</h3>
+                                        <p className="text-gray-600">
+                                            {masterPassword ? item.password : 'Password hidden...'}
+                                        </p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+                <div className="mt-8 text-xs text-gray-500">
+                    <p>Your unique user ID is: {userId}</p>
+                </div>
+            </div>
+        </div>
+    );
